@@ -1,64 +1,97 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback } from "react";
+import { Game, Team, SearchParams, ScoreStreamResponse } from "@/lib/types";
+import { toApiDateTime, buildTeamMap } from "@/lib/scorestream";
+import SearchForm from "@/components/SearchForm";
+import GamesTable from "@/components/GamesTable";
+import ConfidenceStats from "@/components/ConfidenceStats";
+import GameDetailModal from "@/components/GameDetailModal";
 
 export default function Home() {
+  const [games, setGames] = useState<Game[]>([]);
+  const [teamMap, setTeamMap] = useState<Map<number, Team>>(new Map());
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
+
+  const handleSearch = useCallback(async (params: SearchParams) => {
+    setLoading(true);
+    setGames([]);
+    setTotal(0);
+
+    const allGames: Game[] = [];
+    const allTeams: Team[] = [];
+    let offset = 0;
+    let totalCount = 0;
+    const count = 30;
+
+    try {
+      do {
+        setProgress(`Fetching games ${offset + 1}–${offset + count}…`);
+
+        const searchParams = new URLSearchParams({
+          state: params.state,
+          afterDateTime: toApiDateTime(params.afterDateTime),
+          beforeDateTime: toApiDateTime(params.beforeDateTime, true),
+          sportNames: JSON.stringify([params.sportName]),
+          squadIds: JSON.stringify([params.squadId]),
+          count: String(count),
+          offset: String(offset),
+        });
+
+        const res = await fetch(`/api/games?${searchParams}`);
+        const data: ScoreStreamResponse = await res.json();
+
+        if (!data.result) break;
+
+        totalCount = data.result.total;
+        allGames.push(...data.result.collections.gameCollection.list);
+        allTeams.push(...data.result.collections.teamCollection.list);
+        offset += count;
+      } while (offset < totalCount);
+
+      setGames(allGames);
+      setTeamMap(buildTeamMap(allTeams));
+      setTotal(totalCount);
+    } catch (err) {
+      console.error("Search failed:", err);
+    } finally {
+      setLoading(false);
+      setProgress("");
+    }
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <header className="border-b border-zinc-800 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className="w-2 h-8 bg-emerald-500 rounded-sm" />
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">ScoreStream Settlement Layer</h1>
+            <p className="text-xs text-zinc-500">Amateur Sports Score Verification Dashboard</p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        <SearchForm onSearch={handleSearch} loading={loading} />
+
+        {loading && (
+          <div className="text-center text-zinc-500 py-4 text-sm font-mono">{progress}</div>
+        )}
+
+        {!loading && games.length > 0 && (
+          <>
+            <ConfidenceStats games={games} total={total} />
+            <GamesTable games={games} teamMap={teamMap} onSelectGame={setSelectedGameId} />
+          </>
+        )}
+
+        {selectedGameId !== null && (
+          <GameDetailModal gameId={selectedGameId} onClose={() => setSelectedGameId(null)} />
+        )}
       </main>
     </div>
   );
