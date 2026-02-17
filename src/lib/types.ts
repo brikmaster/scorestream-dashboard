@@ -2,7 +2,7 @@ export interface Game {
   gameId: number;
   homeTeamId: number;
   awayTeamId: number;
-  dateTime: string;
+  startDateTime: string;
   lastScore: {
     homeTeamScore: number;
     awayTeamScore: number;

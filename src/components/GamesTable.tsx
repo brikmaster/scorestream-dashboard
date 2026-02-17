@@ -11,7 +11,7 @@ interface Props {
   onSelectGame: (gameId: number) => void;
 }
 
-type SortKey = "date" | "home" | "away" | "score" | "margin" | "confidence";
+type SortKey = "date" | "home" | "away" | "score" | "margin" | "confidence" | "period";
 type SortDir = "asc" | "desc";
 
 export default function GamesTable({ games, teamMap, onSelectGame }: Props) {
@@ -28,7 +28,7 @@ export default function GamesTable({ games, teamMap, onSelectGame }: Props) {
     const dir = sortDir === "asc" ? 1 : -1;
     arr.sort((a, b) => {
       switch (sortKey) {
-        case "date": return dir * (new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+        case "date": return dir * (new Date(a.startDateTime.replace(" ", "T")).getTime() - new Date(b.startDateTime.replace(" ", "T")).getTime());
         case "home": return dir * ((teamMap.get(a.homeTeamId)?.teamName || "").localeCompare(teamMap.get(b.homeTeamId)?.teamName || ""));
         case "away": return dir * ((teamMap.get(a.awayTeamId)?.teamName || "").localeCompare(teamMap.get(b.awayTeamId)?.teamName || ""));
         case "score": {
@@ -45,6 +45,11 @@ export default function GamesTable({ games, teamMap, onSelectGame }: Props) {
           const ca = a.lastScore?.confidenceGrade ?? -1;
           const cb = b.lastScore?.confidenceGrade ?? -1;
           return dir * (ca - cb);
+        }
+        case "period": {
+          const pa = a.lastScore?.gameSegmentId ?? 0;
+          const pb = b.lastScore?.gameSegmentId ?? 0;
+          return dir * (pa - pb);
         }
         default: return 0;
       }
@@ -74,6 +79,7 @@ export default function GamesTable({ games, teamMap, onSelectGame }: Props) {
             <SortHeader k="home">Home</SortHeader>
             <SortHeader k="away">Away</SortHeader>
             <SortHeader k="score">Score</SortHeader>
+            <SortHeader k="period">Period</SortHeader>
             <SortHeader k="margin">Margin</SortHeader>
             <SortHeader k="confidence">Confidence</SortHeader>
             <th className="px-3 py-2 text-left text-xs uppercase tracking-wider text-zinc-500">Status</th>
@@ -96,8 +102,7 @@ export default function GamesTable({ games, teamMap, onSelectGame }: Props) {
                 onClick={() => onSelectGame(g.gameId)}
               >
                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs whitespace-nowrap">
-                  {new Date(g.dateTime).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  {isFinal && <span className="ml-1 text-emerald-500 text-[10px]">F</span>}
+                  {new Date(g.startDateTime.replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                 </td>
                 <td className="px-3 py-2 text-zinc-200">
                   {home ? `${home.teamName}` : `#${g.homeTeamId}`}
@@ -111,6 +116,13 @@ export default function GamesTable({ games, teamMap, onSelectGame }: Props) {
                   {hasScore
                     ? `${g.lastScore!.homeTeamScore} - ${g.lastScore!.awayTeamScore}`
                     : <span className="text-zinc-600">Upcoming</span>}
+                </td>
+                <td className="px-3 py-2 text-xs whitespace-nowrap">
+                  {isFinal
+                    ? <span className="text-emerald-400 font-semibold">Final</span>
+                    : hasScore
+                      ? <span className="text-amber-400">In Progress</span>
+                      : <span className="text-zinc-600">Scheduled</span>}
                 </td>
                 <td className="px-3 py-2 font-mono text-zinc-400">
                   {hasScore ? Math.abs(g.lastScore!.homeTeamScore - g.lastScore!.awayTeamScore) : "—"}
